@@ -3,8 +3,15 @@ from ads.models import Ad
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from ads.humanize import naturalsize
 
+# strip means to remove whitespace from the beginning and the end before storing the column
+
+
+class CommentForm(forms.Form):
+    comment = forms.CharField(required=True, max_length=500, min_length=3, strip=True)
 
 # Create the form class.
+
+
 class CreateForm(forms.ModelForm):
     max_upload_limit = 2 * 1024 * 1024
     max_upload_limit_text = naturalsize(max_upload_limit)
@@ -15,10 +22,9 @@ class CreateForm(forms.ModelForm):
     picture = forms.FileField(required=False, label='File to Upload <= ' + max_upload_limit_text)
     upload_field_name = 'picture'
 
-    # Hint: this will need to be changed for use in the ads application :)
     class Meta:
         model = Ad
-        fields = ['title', 'text', 'picture']  # Picture is manual
+        fields = ['title', 'text', 'price', 'picture']  # Picture is manual
 
     # Validate the size of the picture
     def clean(self):
