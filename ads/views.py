@@ -4,26 +4,48 @@ from django.urls import reverse_lazy, reverse
 from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import CreateView, UpdateView
+from django.contrib.humanize.templatetags.humanize import naturaltime
 
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from ads.forms import CreateForm, CommentForm
 from ads.models import Ad, Comment, Fav
-from ads.owner import OwnerListView, OwnerDetailView,OwnerDeleteView
+from ads.owner import OwnerDetailView, OwnerDeleteView
+from django.db.models import Q
+
+from taggit.models import Tag
+from django.template.defaultfilters import slugify
 
 
-class AdListView(OwnerListView):
+class AdListView(View):
     model = Ad
     template_name = "ads/ad_list.html"
 
     def get(self, request):
-        ad_list = Ad.objects.all()
+        strval = request.GET.get("search", False)
+        if strval:
+            # Simple title-only search
+            # objects = Post.objects.filter(title__contains=strval).select_related().order_by('-updated_at')[:10]
+
+            # Multi-field search
+            query = Q(title__contains=strval)
+            query.add(Q(text__contains=strval), Q.OR)
+            objects = Ad.objects.filter(query).select_related().order_by('-updated_at')[:10]
+        else:
+            # try both versions with > 4 posts and watch the queries that happen
+            objects = Ad.objects.all().order_by('-updated_at')[:10]
+            # objects = Post.objects.select_related().all().order_by('-updated_at')[:10]
+
+        # Augment the post_list
+        for obj in objects:
+            obj.natural_updated = naturaltime(obj.updated_at)
+        ad_list = objects
         favorites = list()
         if request.user.is_authenticated:
             rows = request.user.favorite_ads.values('id')
-            favorites = [ row['id'] for row in rows ]
-        ctx = {'ad_list' : ad_list, 'favorites': favorites}
+            favorites = [row['id'] for row in rows]
+        ctx = {'ad_list': ad_list, 'favorites': favorites}
         return render(request, self.template_name, ctx)
 
 
@@ -35,8 +57,9 @@ class AdDetailView(OwnerDetailView):
         x = Ad.objects.get(id=pk)
         comments = Comment.objects.filter(ad=x).order_by('-updated_at')
         comment_form = CommentForm()
-        context = { 'ad' : x, 'comments': comments, 'comment_form': comment_form }
+        context = {'ad': x, 'comments': comments, 'comment_form': comment_form}
         return render(request, self.template_name, context)
+
 
 class AdCreateView(LoginRequiredMixin, CreateView):
     template_name = 'ads/ad_form.html'
@@ -55,8 +78,13 @@ class AdCreateView(LoginRequiredMixin, CreateView):
         # Add owner to the model before saving
         ad = form.save(commit=False)
         ad.owner = self.request.user
+        ad.slug = slugify(ad.title)
         ad.save()
+        # https://django-taggit.readthedocs.io/en/latest/forms.html#commit-false
+        form.save_m2m()
+
         return redirect(self.success_url)
+
 
 class AdUpdateView(LoginRequiredMixin, UpdateView):
     template_name = 'ads/ad_form.html'
@@ -102,6 +130,7 @@ class CommentCreateView(LoginRequiredMixin, View):
         comment.save()
         return redirect(reverse('ads:ad_detail', args=[pk]))
 
+
 class CommentDeleteView(OwnerDeleteView):
     model = Comment
     template_name = "ads/comment_delete.html"
@@ -114,6 +143,7 @@ class CommentDeleteView(OwnerDeleteView):
 
 # csrf exemption in class based views
 # https://stackoverflow.com/questions/16458166/how-to-disable-djangos-csrf-validation
+
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.db.utils import IntegrityError
@@ -121,8 +151,8 @@ from django.db.utils import IntegrityError
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AddFavoriteView(LoginRequiredMixin, View):
-    def post(self, request, pk) :
-        print("Add PK",pk)
+    def post(self, request, pk):
+        print("Add PK", pk)
         ad = get_object_or_404(Ad, id=pk)
         fav = Fav(user=request.user, ad=ad)
         try:
