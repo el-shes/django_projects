@@ -16,17 +16,15 @@ Including another URLconf
 import os
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
 from django.conf.urls import url
 from django.contrib.auth import views as auth_views
 from django.views.static import serve
-from django.views.generic import TemplateView
 
 urlpatterns = [
-    path('', include('home.urls')),  # Change to ads.urls
-    path('admin/', admin.site.urls),  # Keep
-    path('accounts/', include('django.contrib.auth.urls')),  # Keep
-    url(r'^oauth/', include('social_django.urls', namespace='social')),  # Keep
+    path('', include('home.urls')),
+    path('admin/', admin.site.urls),
+    path('accounts/', include('django.contrib.auth.urls')),
+    url(r'^oauth/', include('social_django.urls', namespace='social')),
 
     # Sample applications
     path('polls/', include('polls.urls')),
